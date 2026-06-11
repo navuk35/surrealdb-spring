@@ -14,6 +14,7 @@
     <url>https://github.com/navuk35/surrealdb-spring</url>
 
     <modules>
+        <module>surrealdb-spring-core</module>
     </modules>
 
     <properties>
@@ -34,6 +35,11 @@
                 <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.github.navuk35</groupId>
+                <artifactId>surrealdb-spring-core</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.testcontainers</groupId>
