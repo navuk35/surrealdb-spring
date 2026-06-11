@@ -8,7 +8,6 @@ import org.apache.commons.logging.LogFactory;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 /**
  * Flyway-style migration runner for SurrealDB. Versioned migrations
@@ -19,16 +18,6 @@ import java.util.regex.Pattern;
 public class SurgeMigrator {
 
     private static final Log logger = LogFactory.getLog(SurgeMigrator.class);
-
-    /**
-     * Opt-out directive for migrations that must not run inside a
-     * transaction (e.g. huge backfills hitting backend transaction limits,
-     * or DEFINE INDEX ... CONCURRENTLY whose build is asynchronous anyway).
-     */
-    static final String NO_TRANSACTION_DIRECTIVE = "-- surge:no-transaction";
-
-    private static final Pattern USER_MANAGED_TRANSACTION =
-            Pattern.compile("(?i)\\bBEGIN\\b");
 
     private final Surreal surreal;
     private final SurgeSettings settings;
@@ -136,8 +125,25 @@ public class SurgeMigrator {
     private void apply(MigrationScript script, long rank) {
         logger.info("Surge: applying " + script.script());
         long started = System.nanoTime();
+        if (SurgeStatements.runsInTransaction(script.content())) {
+            // migration body and changelog record travel in ONE transactional
+            // request — applied and recorded are a single atomic fact
+            SurgeStatements.Composed composed = SurgeStatements.transactionalApply(script, rank);
+            run(script, () -> surreal.query(composed.sql(), composed.params()));
+            // the real duration is only known now; patching it is best-effort
+            changelog.updateExecutionTime(script.script(), elapsedMs(started));
+        }
+        else {
+            // opted out of transactions: record must follow in a second
+            // request, reopening a small applied-but-unrecorded crash window
+            run(script, () -> surreal.query(script.content()));
+            changelog.record(script, elapsedMs(started), rank);
+        }
+    }
+
+    private void run(MigrationScript script, java.util.function.Supplier<Response> query) {
         try {
-            Response response = surreal.query(executableSql(script));
+            Response response = query.get();
             // statement errors only surface when the result slot is consumed
             for (int i = 0; i < response.size(); i++) {
                 response.take(i);
@@ -147,17 +153,9 @@ public class SurgeMigrator {
             throw new SurgeException("Migration '" + script.script() + "' failed: "
                     + ex.getMessage(), ex);
         }
-        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
-        changelog.record(script, elapsedMs, rank);
     }
 
-    private String executableSql(MigrationScript script) {
-        String content = script.content();
-        if (content.stripLeading().startsWith(NO_TRANSACTION_DIRECTIVE)
-                || USER_MANAGED_TRANSACTION.matcher(content).find()) {
-            return content;
-        }
-        // SurrealDB 3.x DDL is transactional, so each migration is atomic
-        return "BEGIN TRANSACTION;\n" + content + "\nCOMMIT TRANSACTION;";
+    private static long elapsedMs(long startedNanos) {
+        return (System.nanoTime() - startedNanos) / 1_000_000;
     }
 }

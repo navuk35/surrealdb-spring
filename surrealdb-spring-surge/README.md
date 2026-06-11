@@ -44,6 +44,15 @@ so Surge wraps each migration in `BEGIN TRANSACTION; ... COMMIT
 TRANSACTION;` — a migration that fails halfway leaves *nothing* behind,
 not even implicitly created tables, and is not recorded.
 
+The **changelog record travels inside the same transaction** as the
+migration body (bookkeeping parameters are prefixed `__surge_` so they
+cannot collide with the migration's own). "Applied" and "recorded" are
+therefore one atomic fact: a client crash at any instant can never leave
+an applied-but-unrecorded migration to be re-run on recovery. The only
+field patched afterwards is `execution_time_ms` (unknowable until the
+request returns; `-1` until then) — losing that patch loses a metric,
+never a fact.
+
 Opt out per file with a leading directive (for huge backfills that might
 exceed backend transaction limits, or `DEFINE INDEX ... CONCURRENTLY`
 whose build is asynchronous anyway):

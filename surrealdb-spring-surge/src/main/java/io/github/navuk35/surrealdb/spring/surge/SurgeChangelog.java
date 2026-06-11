@@ -94,6 +94,14 @@ class SurgeChangelog {
         }
     }
 
+    /** Best-effort patch of the duration once the atomic apply has returned. */
+    void updateExecutionTime(String script, long executionTimeMs) {
+        surreal.query("""
+                UPDATE type::record('surge_changelog', $script)
+                SET execution_time_ms = $ms
+                """, Map.of("script", script, "ms", executionTimeMs));
+    }
+
     void acquireLock(Duration timeout) {
         String owner = ManagementFactory.getRuntimeMXBean().getName();
         Instant deadline = Instant.now().plus(timeout);
