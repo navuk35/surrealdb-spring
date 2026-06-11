@@ -23,13 +23,15 @@ Primary DB and cache always use **two separate Surreal connections**.
 
 ## Modules
 
-```
-surrealdb-spring-core/           SurrealTemplate, transaction manager
-surrealdb-spring-cache/          SurrealCacheManager
-surrealdb-spring-surge/          Surge — schema migrations for SurrealDB
-surrealdb-spring-boot-starter/   Auto-configuration
-surrealdb-spring-boot-sample/    Demo app + integration tests
-```
+Each module has its own in-depth README:
+
+| Module | What it is |
+|--------|------------|
+| [surrealdb-spring-core](surrealdb-spring-core/README.md) | `SurrealTemplate`, Spring transactions, eagerly-checked query results, exception translation |
+| [surrealdb-spring-cache](surrealdb-spring-cache/README.md) | Spring `CacheManager` backed by SurrealDB — null contract, typed payloads, atomic writes |
+| [surrealdb-spring-surge](surrealdb-spring-surge/README.md) | Surge — Flyway-style versioned + repeatable schema migrations |
+| [surrealdb-spring-boot-starter](surrealdb-spring-boot-starter/README.md) | Auto-configuration, property reference, override points |
+| [surrealdb-spring-boot-sample](surrealdb-spring-boot-sample/README.md) | Runnable demo + the documentation-driven integration suite |
 
 ## Quick start
 

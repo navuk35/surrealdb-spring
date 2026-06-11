@@ -1,0 +1,91 @@
+# Surge — schema migrations for SurrealDB
+
+Flyway-style, version-based database migrations. Put `.surql` files in a
+changelog folder; Surge applies them on startup, records what ran, and
+refuses to let applied history drift.
+
+```
+src/main/resources/surge/changelog/
+├── V0_1__create_person.surql           versioned: runs once, frozen afterwards
+├── V0_2__person_email_unique.surql     applied in numeric version order
+└── R__person_functions.surql           repeatable: re-runs whenever it changes
+```
+
+## Versioned migrations — `V<version>__<description>.surql`
+
+- Versions are underscore-separated numbers (`V0_1`, `V1_2_3`) compared
+  **numerically** — `V0_10` runs after `V0_2`.
+- Each runs **exactly once**. After application its SHA-256 checksum
+  (line-ending normalized, so Windows and macOS agree) is frozen: editing
+  an applied file fails the next startup with a checksum mismatch.
+- New files must sort **above** the latest applied version — out-of-order
+  versions are rejected with a message telling you what to renumber.
+
+## Repeatable migrations — `R__<description>.surql`
+
+Re-run whenever their content changes, after all versioned migrations.
+This is the intended "override in place" workflow, pairing naturally with
+SurrealDB's idempotent DDL:
+
+```sql
+DEFINE FUNCTION OVERWRITE fn::greet($name: string) {
+    RETURN "Hello, " + $name;
+};
+```
+
+Edit the file, restart, and the new definition is live — recorded by
+checksum in the changelog.
+
+## Atomicity
+
+SurrealDB 3.x DDL is **fully transactional** (verified empirically:
+`DEFINE TABLE` / `FIELD` / `INDEX` / `FUNCTION` all roll back on failure),
+so Surge wraps each migration in `BEGIN TRANSACTION; ... COMMIT
+TRANSACTION;` — a migration that fails halfway leaves *nothing* behind,
+not even implicitly created tables, and is not recorded.
+
+Opt out per file with a leading directive (for huge backfills that might
+exceed backend transaction limits, or `DEFINE INDEX ... CONCURRENTLY`
+whose build is asynchronous anyway):
+
+```sql
+-- surge:no-transaction
+UPDATE big_table SET migrated = true;
+```
+
+Files containing their own `BEGIN` are left untouched.
+
+## Bookkeeping tables
+
+- `surge_changelog` — type, version, description, script, checksum,
+  installed_rank, installed_on, execution_time_ms; one row per versioned
+  migration, upserted per repeatable.
+- `surge_lock` — a single `surge_lock:global` record serializes concurrent
+  application instances; acquisition polls until `lock-timeout`. A stale
+  lock after a crash can be removed with `DELETE surge_lock:global`.
+
+## Use with Spring Boot
+
+The starter auto-runs migrations before any bean touches the database
+(`SurrealTemplate` and the transaction manager depend on the migration
+initializer — the same wiring Boot uses for Flyway).
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `spring.surrealdb.surge.enabled` | `true` | Run on startup |
+| `spring.surrealdb.surge.locations` | `classpath:surge/changelog` | `classpath:` and `file:` locations |
+| `spring.surrealdb.surge.lock-timeout` | `1m` | Wait for another instance's lock |
+
+## Programmatic use (no Spring required)
+
+```java
+SurgeMigrator migrator = new SurgeMigrator(surreal,
+        new SurgeSettings(List.of("file:/etc/myapp/migrations"), Duration.ofSeconds(30)));
+SurgeResult result = migrator.migrate();
+```
+
+## SurrealDB 3.x syntax notes
+
+- `type::record(...)` replaced `type::thing(...)`.
+- Flexible fields are `DEFINE FIELD meta ON t TYPE object FLEXIBLE`
+  (the 2.x `FLEXIBLE TYPE object` order is now a parse error).
