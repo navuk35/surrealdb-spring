@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.navuk35</groupId>
         <artifactId>surrealdb-spring-parent</artifactId>
-        <version>0.2.0</version>
+        <version>0.3.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>surrealdb-spring-cache</artifactId>
