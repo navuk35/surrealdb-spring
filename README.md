@@ -29,7 +29,7 @@ Each module has its own in-depth README:
 |--------|------------|
 | [surrealdb-spring-core](surrealdb-spring-core/README.md) | `SurrealTemplate`, Spring transactions, eagerly-checked query results, exception translation |
 | [surrealdb-spring-cache](surrealdb-spring-cache/README.md) | Spring `CacheManager` backed by SurrealDB — null contract, typed payloads, atomic writes |
-| [surrealdb-spring-surge](surrealdb-spring-surge/README.md) | Surge — Flyway-style versioned + repeatable schema migrations |
+| [surrealdb-spring-surge](surrealdb-spring-surge/README.md) | Surge — Flyway-style versioned + repeatable migrations, with native multi-tenancy |
 | [surrealdb-spring-boot-starter](surrealdb-spring-boot-starter/README.md) | Auto-configuration, property reference, override points |
 | [surrealdb-spring-boot-sample](surrealdb-spring-boot-sample/README.md) | Runnable demo + the documentation-driven integration suite |
 
@@ -163,13 +163,20 @@ surge/changelog/
   transactional, so a failed migration leaves nothing behind. Opt out per file
   with a leading `-- surge:no-transaction` (e.g. for huge backfills).
 - Applied migrations are recorded in the `surge_changelog` table; concurrent
-  instances are serialized through a `surge_lock` record.
+  instances are serialized through a leased, self-healing `surge_lock` record.
+- **Native multi-tenancy** (database-per-tenant): every tenant database gets
+  the shared `common/` changelog plus its own `tenants/<id>/` overlay, with
+  independent per-tenant bookkeeping — plus a runtime `migrateTenant(id)` API
+  for onboarding flows. Something neither Flyway nor Liquibase offers; see the
+  [Surge README](surrealdb-spring-surge/README.md) for the full guide.
 
 | Property | Default | Description |
 |----------|---------|-------------|
 | `enabled` | `true` | Run migrations on startup |
 | `locations` | `classpath:surge/changelog` | Folders to scan (`classpath:` or `file:`) |
 | `lock-timeout` | `1m` | How long to wait for another instance's migration lock |
+| `lock-lease` | `5m` | Lease length; expired leases (crashed holders) are stolen |
+| `tenants` | — | Tenant databases swept at startup (database-per-tenant mode) |
 
 ## Auto-configured beans
 
