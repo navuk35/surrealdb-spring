@@ -15,6 +15,7 @@
 
     <modules>
         <module>surrealdb-spring-core</module>
+        <module>surrealdb-spring-cache</module>
     </modules>
 
     <properties>
@@ -39,6 +40,11 @@
             <dependency>
                 <groupId>io.github.navuk35</groupId>
                 <artifactId>surrealdb-spring-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.navuk35</groupId>
+                <artifactId>surrealdb-spring-cache</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
