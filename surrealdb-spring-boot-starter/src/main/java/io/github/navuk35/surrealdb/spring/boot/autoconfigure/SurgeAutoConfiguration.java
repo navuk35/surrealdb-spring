@@ -1,9 +1,12 @@
 package io.github.navuk35.surrealdb.spring.boot.autoconfigure;
 
 import com.surrealdb.Surreal;
+import com.surrealdb.signin.RootCredential;
 import io.github.navuk35.surrealdb.spring.core.SurrealTemplate;
 import io.github.navuk35.surrealdb.spring.surge.SurgeMigrator;
 import io.github.navuk35.surrealdb.spring.surge.SurgeSettings;
+import io.github.navuk35.surrealdb.spring.surge.SurgeTenantMigrator;
+import io.github.navuk35.surrealdb.spring.surge.SurrealConnectionFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -33,11 +36,39 @@ public class SurgeAutoConfiguration {
                 properties.getLocations(), properties.getLockTimeout(), properties.getLockLease()));
     }
 
+    /**
+     * Dedicated short-lived connections for tenant migrations — never the
+     * primary connection, whose useDb() state-switch would redirect live
+     * application traffic to the wrong tenant.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    SurrealConnectionFactory surrealConnectionFactory(SurrealProperties surrealProperties) {
+        return (namespace, database) -> {
+            Surreal db = new Surreal();
+            db.connect(surrealProperties.getUrl());
+            db.useNs(namespace).useDb(database);
+            db.signin(new RootCredential(
+                    surrealProperties.getUsername(), surrealProperties.getPassword()));
+            return db;
+        };
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    SurgeTenantMigrator surgeTenantMigrator(SurrealConnectionFactory connectionFactory,
+            SurrealProperties surrealProperties, SurgeProperties properties) {
+        return new SurgeTenantMigrator(connectionFactory, surrealProperties.getNamespace(),
+                new SurgeSettings(properties.getLocations(), properties.getLockTimeout(),
+                        properties.getLockLease()));
+    }
+
     @Bean(name = INITIALIZER_BEAN_NAME)
     @ConditionalOnMissingBean
     @ConditionalOnBean(SurgeMigrator.class)
-    SurgeMigrationInitializer surgeMigrationInitializer(SurgeMigrator migrator) {
-        return new SurgeMigrationInitializer(migrator);
+    SurgeMigrationInitializer surgeMigrationInitializer(SurgeMigrator migrator,
+            SurgeTenantMigrator tenantMigrator, SurgeProperties properties) {
+        return new SurgeMigrationInitializer(migrator, tenantMigrator, properties.getTenants());
     }
 
     /**

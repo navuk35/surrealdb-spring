@@ -91,6 +91,49 @@ initializer — the same wiring Boot uses for Flyway).
 | `spring.surrealdb.surge.lock-timeout` | `1m` | Wait for another instance's lock |
 | `spring.surrealdb.surge.lock-lease` | `5m` | Lease length; expired leases are treated as crashed holders and stolen |
 
+## Multi-tenancy (database-per-tenant)
+
+SurrealDB makes database-per-tenant cheap (`namespace → database → table`),
+and Surge supports it natively — every tenant database receives the shared
+`common/` changelog plus its own overlay, and keeps its own
+`surge_changelog` and `surge_lock`, so tenants migrate independently:
+
+```
+surge/changelog/
+├── common/                       applied to EVERY tenant, in version order
+│   └── V0_1__shared_schema.surql
+└── tenants/
+    ├── acme/                     applied ONLY to tenant 'acme'
+    │   └── V0_2__acme_extras.surql
+    └── globex/
+        └── V0_2__globex_extras.surql
+```
+
+```yaml
+spring:
+  surrealdb:
+    surge:
+      tenants: acme, globex     # swept at startup, after the primary database
+```
+
+Onboarding a new tenant at runtime (the provisioning flow):
+
+```java
+@Autowired SurgeTenantMigrator tenantMigrator;
+
+public void provisionTenant(String tenantId) {
+    tenantMigrator.migrateTenant(tenantId);   // common/ + overlay, fresh database
+}
+```
+
+Every tenant migration runs on its own short-lived connection from the
+`SurrealConnectionFactory` bean (overridable) — never on the primary
+connection, whose `useDb()` state-switch would redirect live application
+traffic. Tenant ids become database and folder names and are validated as
+plain identifiers. A failing tenant aborts the sweep with the tenant named
+in the error; already-migrated tenants are unaffected (per-tenant
+changelogs).
+
 ## Programmatic use (no Spring required)
 
 ```java

@@ -4,6 +4,7 @@ import io.github.navuk35.surrealdb.spring.surge.SurgeSettings;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 @ConfigurationProperties(prefix = "spring.surrealdb.surge")
@@ -29,6 +30,13 @@ public class SurgeProperties {
      * expired lease is treated as a crashed holder and stolen.
      */
     private Duration lockLease = Duration.ofMinutes(5);
+
+    /**
+     * Database-per-tenant mode: each listed tenant is a database that
+     * receives the common/ changelog plus its tenants/&lt;id&gt;/ overlay
+     * at startup. Empty list = single-tenant behaviour.
+     */
+    private List<String> tenants = new ArrayList<>();
 
     public boolean isEnabled() {
         return enabled;
@@ -60,5 +68,13 @@ public class SurgeProperties {
 
     public void setLockLease(Duration lockLease) {
         this.lockLease = lockLease;
+    }
+
+    public List<String> getTenants() {
+        return tenants;
+    }
+
+    public void setTenants(List<String> tenants) {
+        this.tenants = tenants;
     }
 }
