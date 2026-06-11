@@ -18,6 +18,7 @@
         <module>surrealdb-spring-cache</module>
         <module>surrealdb-spring-surge</module>
         <module>surrealdb-spring-boot-starter</module>
+        <module>surrealdb-spring-boot-sample</module>
     </modules>
 
     <properties>

@@ -1,0 +1,1 @@
+DEFINE INDEX IF NOT EXISTS person_email ON person FIELDS email UNIQUE;
