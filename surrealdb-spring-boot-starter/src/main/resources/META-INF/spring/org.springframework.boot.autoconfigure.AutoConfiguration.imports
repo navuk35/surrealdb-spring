@@ -1,0 +1,4 @@
+io.github.navuk35.surrealdb.spring.boot.autoconfigure.SurrealAutoConfiguration
+io.github.navuk35.surrealdb.spring.boot.autoconfigure.SurgeAutoConfiguration
+io.github.navuk35.surrealdb.spring.boot.autoconfigure.SurrealCacheAutoConfiguration
+io.github.navuk35.surrealdb.spring.boot.autoconfigure.SurrealHealthContributorAutoConfiguration
