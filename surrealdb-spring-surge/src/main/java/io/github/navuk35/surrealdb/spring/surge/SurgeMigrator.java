@@ -8,6 +8,9 @@ import org.apache.commons.logging.LogFactory;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Flyway-style migration runner for SurrealDB. Versioned migrations
@@ -37,7 +40,8 @@ public class SurgeMigrator {
     public SurgeResult migrate() {
         MigrationScanner.ScanResult scripts = scanner.scan(settings.locations());
         changelog.ensureSchema();
-        changelog.acquireLock(settings.lockTimeout());
+        changelog.acquireLock(settings.lockTimeout(), settings.lockLease());
+        ScheduledExecutorService heartbeat = startLockHeartbeat();
         try {
             List<AppliedMigration> applied = changelog.findApplied();
             validate(scripts, applied);
@@ -61,8 +65,33 @@ public class SurgeMigrator {
             return new SurgeResult(versionedApplied, repeatableApplied);
         }
         finally {
+            heartbeat.shutdownNow();
             changelog.releaseLock();
         }
+    }
+
+    /**
+     * Renews the lock lease while migrations run, so a slow migration (a
+     * blocking index build, a large backfill) is never mistaken for a
+     * crashed holder and stolen from. Only a holder that stops heartbeating
+     * — i.e. actually died — lets its lease expire.
+     */
+    private ScheduledExecutorService startLockHeartbeat() {
+        long intervalMs = Math.max(settings.lockLease().toMillis() / 3, 1_000);
+        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "surge-lock-heartbeat");
+            thread.setDaemon(true);
+            return thread;
+        });
+        executor.scheduleAtFixedRate(() -> {
+            try {
+                changelog.extendLease(settings.lockLease());
+            }
+            catch (RuntimeException ex) {
+                logger.warn("Surge: lock heartbeat failed — " + ex.getMessage());
+            }
+        }, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
+        return executor;
     }
 
     private void validate(MigrationScanner.ScanResult scripts, List<AppliedMigration> applied) {
@@ -129,14 +158,14 @@ public class SurgeMigrator {
             // migration body and changelog record travel in ONE transactional
             // request — applied and recorded are a single atomic fact
             SurgeStatements.Composed composed = SurgeStatements.transactionalApply(script, rank);
-            run(script, () -> surreal.query(composed.sql(), composed.params()));
+            run(script, () -> changelog.query(composed.sql(), composed.params()));
             // the real duration is only known now; patching it is best-effort
             changelog.updateExecutionTime(script.script(), elapsedMs(started));
         }
         else {
             // opted out of transactions: record must follow in a second
             // request, reopening a small applied-but-unrecorded crash window
-            run(script, () -> surreal.query(script.content()));
+            run(script, () -> changelog.query(script.content()));
             changelog.record(script, elapsedMs(started), rank);
         }
     }

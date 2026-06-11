@@ -8,6 +8,7 @@ import org.springframework.cache.CacheManager;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -16,19 +17,30 @@ public class SurrealCacheManager implements CacheManager {
     private final Surreal surreal;
     private final ObjectMapper objectMapper;
     private final Duration defaultTtl;
+    private final Map<String, Duration> ttlPerCache;
     private final ConcurrentMap<String, Cache> caches = new ConcurrentHashMap<>();
 
+    private volatile boolean schemaReady;
+
     public SurrealCacheManager(Surreal surreal, ObjectMapper objectMapper, Duration defaultTtl) {
+        this(surreal, objectMapper, defaultTtl, Map.of());
+    }
+
+    public SurrealCacheManager(Surreal surreal, ObjectMapper objectMapper, Duration defaultTtl,
+            Map<String, Duration> ttlPerCache) {
         this.surreal = surreal;
         this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
         this.defaultTtl = defaultTtl != null ? defaultTtl : Duration.ofMinutes(10);
-        ensureSchema();
+        this.ttlPerCache = ttlPerCache != null ? Map.copyOf(ttlPerCache) : Map.of();
+        // deliberately no database access here: schema creation is deferred to
+        // first use so an unreachable cache store cannot fail application startup
     }
 
     @Override
     public Cache getCache(String name) {
-        return caches.computeIfAbsent(name,
-                cacheName -> new SurrealCache(cacheName, surreal, objectMapper, defaultTtl));
+        ensureSchemaOnce();
+        return caches.computeIfAbsent(name, cacheName -> new SurrealCache(
+                cacheName, surreal, objectMapper, ttlPerCache.getOrDefault(cacheName, defaultTtl)));
     }
 
     @Override
@@ -43,18 +55,28 @@ public class SurrealCacheManager implements CacheManager {
      * hold short-lived data.
      */
     public void evictExpired() {
+        ensureSchemaOnce();
         surreal.query("DELETE cache_entry WHERE expires_at != NONE AND expires_at < time::now()");
     }
 
-    private void ensureSchema() {
-        surreal.query("""
-                DEFINE TABLE IF NOT EXISTS cache_entry SCHEMAFULL;
-                DEFINE FIELD IF NOT EXISTS cache ON cache_entry TYPE string;
-                DEFINE FIELD IF NOT EXISTS key ON cache_entry TYPE string;
-                DEFINE FIELD IF NOT EXISTS payload ON cache_entry TYPE string;
-                DEFINE FIELD IF NOT EXISTS is_null ON cache_entry TYPE option<bool>;
-                DEFINE FIELD IF NOT EXISTS expires_at ON cache_entry TYPE option<datetime>;
-                DEFINE INDEX IF NOT EXISTS cache_key ON cache_entry FIELDS cache, key UNIQUE;
-                """);
+    private void ensureSchemaOnce() {
+        if (schemaReady) {
+            return;
+        }
+        synchronized (this) {
+            if (schemaReady) {
+                return;
+            }
+            surreal.query("""
+                    DEFINE TABLE IF NOT EXISTS cache_entry SCHEMAFULL;
+                    DEFINE FIELD IF NOT EXISTS cache ON cache_entry TYPE string;
+                    DEFINE FIELD IF NOT EXISTS key ON cache_entry TYPE string;
+                    DEFINE FIELD IF NOT EXISTS payload ON cache_entry TYPE string;
+                    DEFINE FIELD IF NOT EXISTS is_null ON cache_entry TYPE option<bool>;
+                    DEFINE FIELD IF NOT EXISTS expires_at ON cache_entry TYPE option<datetime>;
+                    DEFINE INDEX IF NOT EXISTS cache_key ON cache_entry FIELDS cache, key UNIQUE;
+                    """);
+            schemaReady = true;
+        }
     }
 }

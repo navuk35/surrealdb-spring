@@ -57,7 +57,8 @@ public class SurrealCacheAutoConfiguration {
         // customizations, so the manager gets its own private mapper instead
         // of an ObjectMapper bean (which would also race with Boot's
         // JacksonAutoConfiguration for the @ConditionalOnMissingBean).
-        return new SurrealCacheManager(surrealCache, new ObjectMapper(), properties.getDefaultTtl());
+        return new SurrealCacheManager(surrealCache, new ObjectMapper(),
+                properties.getDefaultTtl(), properties.getTtlPerCache());
     }
 
     private static String embeddedCacheUrl() {

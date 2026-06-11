@@ -3,6 +3,8 @@ package io.github.navuk35.surrealdb.spring.cache;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
 @ConfigurationProperties(prefix = "spring.surrealdb.cache")
 public class SurrealCacheProperties {
@@ -15,6 +17,11 @@ public class SurrealCacheProperties {
     private String username = "root";
     private String password = "root";
     private Duration defaultTtl = Duration.ofMinutes(10);
+
+    /**
+     * Per-cache-name TTL overrides; ZERO means the cache never expires.
+     */
+    private Map<String, Duration> ttlPerCache = new HashMap<>();
 
     public enum Mode {
         memory, remote
@@ -82,5 +89,13 @@ public class SurrealCacheProperties {
 
     public void setDefaultTtl(Duration defaultTtl) {
         this.defaultTtl = defaultTtl;
+    }
+
+    public Map<String, Duration> getTtlPerCache() {
+        return ttlPerCache;
+    }
+
+    public void setTtlPerCache(Map<String, Duration> ttlPerCache) {
+        this.ttlPerCache = ttlPerCache;
     }
 }

@@ -29,8 +29,8 @@ public class SurgeAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnBean(Surreal.class)
     SurgeMigrator surgeMigrator(Surreal surreal, SurgeProperties properties) {
-        return new SurgeMigrator(surreal,
-                new SurgeSettings(properties.getLocations(), properties.getLockTimeout()));
+        return new SurgeMigrator(surreal, new SurgeSettings(
+                properties.getLocations(), properties.getLockTimeout(), properties.getLockLease()));
     }
 
     @Bean(name = INITIALIZER_BEAN_NAME)

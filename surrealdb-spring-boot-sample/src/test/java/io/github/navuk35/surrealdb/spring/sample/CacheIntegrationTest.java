@@ -61,6 +61,35 @@ class CacheIntegrationTest extends AbstractSurrealIntegrationTest {
     }
 
     @Test
+    void perCacheTtlOverridesTheDefault() {
+        SurrealCacheManager manager = new SurrealCacheManager(
+                (Surreal) cacheManager.getCache("ttl-probe").getNativeCache(),
+                null,
+                java.time.Duration.ofMinutes(10),
+                java.util.Map.of("eternal", java.time.Duration.ZERO,
+                        "short-lived", java.time.Duration.ofSeconds(5)));
+
+        manager.getCache("eternal").put("k", "v");
+        manager.getCache("short-lived").put("k", "v");
+        manager.getCache("defaulted").put("k", "v");
+
+        Surreal db = (Surreal) manager.getCache("eternal").getNativeCache();
+        java.util.List<String> expiries = new java.util.ArrayList<>();
+        db.query("SELECT cache, expires_at FROM cache_entry WHERE cache IN ['eternal','short-lived','defaulted'] ORDER BY cache")
+                .take(0).getArray().forEach(row -> {
+                    com.surrealdb.Object entry = row.getObject();
+                    com.surrealdb.Value expiresAt = entry.get("expires_at");
+                    expiries.add(entry.get("cache").getString() + ":"
+                            + (expiresAt == null || expiresAt.isNone() ? "none" : "set"));
+                });
+
+        assertThat(expiries).containsExactly(
+                "defaulted:set",      // falls back to the manager default
+                "eternal:none",       // ZERO = never expires
+                "short-lived:set");
+    }
+
+    @Test
     void evictExpiredPurgesOnlyExpiredEntries() {
         Cache cache = cacheManager.getCache("purge-test");
         cache.put("alive", "fresh");

@@ -50,9 +50,22 @@ time, write-once-read-never entries accumulate — schedule
 void purgeCaches() { cacheManager.evictExpired(); }
 ```
 
-## Limitations
+Per-cache TTL overrides (`ZERO` = never expires):
 
-- One TTL per manager (per-cache TTL is on the roadmap).
+```yaml
+spring:
+  surrealdb:
+    cache:
+      default-ttl: 10m
+      ttl-per-cache:
+        sessions: 30m
+        reference-data: 0
+```
+
+Schema creation is lazy (first cache use), so an unreachable cache store
+no longer prevents application startup.
+
+## Limitations
 - Top-level *bare* final scalars (caching a lone `BigDecimal`) lose their
   exact type under `NON_FINAL` typing — wrap them in a DTO, where declared
   field types restore them.

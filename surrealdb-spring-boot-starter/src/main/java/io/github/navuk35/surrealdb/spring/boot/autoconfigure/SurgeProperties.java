@@ -24,6 +24,12 @@ public class SurgeProperties {
      */
     private Duration lockTimeout = Duration.ofMinutes(1);
 
+    /**
+     * How long a held lock stays valid without heartbeat renewal; an
+     * expired lease is treated as a crashed holder and stolen.
+     */
+    private Duration lockLease = Duration.ofMinutes(5);
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -46,5 +52,13 @@ public class SurgeProperties {
 
     public void setLockTimeout(Duration lockTimeout) {
         this.lockTimeout = lockTimeout;
+    }
+
+    public Duration getLockLease() {
+        return lockLease;
+    }
+
+    public void setLockLease(Duration lockLease) {
+        this.lockLease = lockLease;
     }
 }

@@ -113,6 +113,29 @@ class SurgeIntegrationTest extends AbstractSurrealIntegrationTest {
     }
 
     @Test
+    @Order(7)
+    void staleLockFromACrashedInstanceIsStolenNotFatal(@TempDir Path dir) throws IOException {
+        // simulate a kill -9: lock present, lease long expired, owner gone
+        template.query("""
+                DELETE surge_lock:global;
+                CREATE surge_lock:global SET locked_at = time::now() - 1h,
+                    locked_by = 'dead-pod-1234', expires_at = time::now() - 50m;
+                """);
+        Files.writeString(dir.resolve("V9_20__after_crash.surql"),
+                "DEFINE TABLE IF NOT EXISTS post_crash SCHEMALESS;");
+
+        SurgeResult result = migratorFor(dir).migrate();
+
+        assertThat(result.versionedApplied())
+                .as("an expired lease must be stolen, not block until timeout")
+                .isEqualTo(1);
+        long locks = template.query("SELECT count() FROM surge_lock GROUP ALL")
+                .list(0, v -> v.getObject().get("count").getLong())
+                .stream().findFirst().orElse(0L);
+        assertThat(locks).as("the stolen lock is released after migration").isZero();
+    }
+
+    @Test
     @Order(6)
     void failedMigrationIsAtomicAndNotRecorded(@TempDir Path dir) throws IOException {
         Files.writeString(dir.resolve("V9_9__broken.surql"),

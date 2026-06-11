@@ -70,8 +70,13 @@ Files containing their own `BEGIN` are left untouched.
   installed_rank, installed_on, execution_time_ms; one row per versioned
   migration, upserted per repeatable.
 - `surge_lock` — a single `surge_lock:global` record serializes concurrent
-  application instances; acquisition polls until `lock-timeout`. A stale
-  lock after a crash can be removed with `DELETE surge_lock:global`.
+  application instances; acquisition polls until `lock-timeout`. The lock
+  is **leased**: the holder heartbeats every `lock-lease`/3 to extend its
+  `expires_at`, so a slow migration is never mistaken for a crash — but a
+  holder that died (`kill -9`, OOM) stops heartbeating, its lease expires,
+  and the next instance **steals the lock atomically** (a conditional
+  `UPDATE ... WHERE expires_at < time::now()`) instead of blocking
+  deployments until a human intervenes.
 
 ## Use with Spring Boot
 
@@ -84,6 +89,7 @@ initializer — the same wiring Boot uses for Flyway).
 | `spring.surrealdb.surge.enabled` | `true` | Run on startup |
 | `spring.surrealdb.surge.locations` | `classpath:surge/changelog` | `classpath:` and `file:` locations |
 | `spring.surrealdb.surge.lock-timeout` | `1m` | Wait for another instance's lock |
+| `spring.surrealdb.surge.lock-lease` | `5m` | Lease length; expired leases are treated as crashed holders and stolen |
 
 ## Programmatic use (no Spring required)
 
