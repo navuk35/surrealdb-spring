@@ -16,6 +16,8 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Build and unit tests
-        run: mvn -B verify
+        # install (not verify): the integration step builds only the sample
+        # module and resolves the others from the runner's local repository
+        run: mvn -B install
       - name: Integration tests (Testcontainers)
         run: mvn -B -pl surrealdb-spring-boot-sample test -Pintegration-tests
