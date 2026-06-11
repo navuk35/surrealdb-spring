@@ -1,0 +1,1 @@
+DEFINE FIELD IF NOT EXISTS email ON users TYPE string;
