@@ -1,0 +1,14 @@
+target/
+.idea/
+.vscode/
+.cursor/
+docs/
+*.iml
+.classpath
+.project
+.settings/
+.DS_Store
+*.log
+.factorypath
+RELEASING.md
+AGENTS.md
